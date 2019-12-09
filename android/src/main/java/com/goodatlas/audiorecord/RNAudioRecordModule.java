@@ -1,10 +1,12 @@
 package com.goodatlas.audiorecord;
 
+import android.content.Context;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.MediaRecorder.AudioSource;
 import android.util.Base64;
 import android.util.Log;
+import android.media.AudioManager;
 
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
@@ -16,13 +18,15 @@ import com.facebook.react.modules.core.DeviceEventManagerModule;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 public class RNAudioRecordModule extends ReactContextBaseJavaModule {
 
     private final String TAG = "RNAudioRecord";
     private final ReactApplicationContext reactContext;
     private DeviceEventManagerModule.RCTDeviceEventEmitter eventEmitter;
-
+    private static final double REFERENCE = 0.6;
     private int sampleRateInHz;
     private int channelConfig;
     private int audioFormat;
@@ -88,9 +92,17 @@ public class RNAudioRecordModule extends ReactContextBaseJavaModule {
         int recordingBufferSize = bufferSize * 3;
         recorder = new AudioRecord(audioSource, sampleRateInHz, channelConfig, audioFormat, recordingBufferSize);
     }
-
+    private AudioManager.OnAudioFocusChangeListener focusChangeListener =
+    new AudioManager.OnAudioFocusChangeListener() {
+      public void onAudioFocusChange(int focusChange) {
+        AudioManager audioManager =(AudioManager) reactContext.getSystemService(Context.AUDIO_SERVICE);
+      }
+    };
     @ReactMethod
     public void start() {
+        AudioManager audioManager = (AudioManager) reactContext.getSystemService(Context.AUDIO_SERVICE);
+
+        audioManager.requestAudioFocus(focusChangeListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE);
         isRecording = true;
         recorder.startRecording();
         Log.d(TAG, "started recording");
@@ -106,7 +118,17 @@ public class RNAudioRecordModule extends ReactContextBaseJavaModule {
 
                     while (isRecording) {
                         bytesRead = recorder.read(buffer, 0, buffer.length);
-
+                        short[] shorts = new short[buffer.length / 2];
+                        ByteBuffer.wrap(buffer).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(shorts);
+                        int nMaxAmp = 0;
+                        int arrLen = shorts.length;
+                        int peakIndex;
+                        for (peakIndex = 0; peakIndex < arrLen; peakIndex++) {
+                          if (shorts[peakIndex] >= nMaxAmp) {
+                            nMaxAmp = shorts[peakIndex];
+                          }
+                        }
+                        eventEmitter.emit("maxAmp", (int) (20 * Math.log10(nMaxAmp / REFERENCE)));
                         // skip first 2 buffers to eliminate "click sound"
                         if (bytesRead > 0 && ++count > 2) {
                             base64Data = Base64.encodeToString(buffer, Base64.NO_WRAP);
@@ -130,6 +152,8 @@ public class RNAudioRecordModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void stop(Promise promise) {
+        AudioManager audioManager = (AudioManager) reactContext.getSystemService(Context.AUDIO_SERVICE);
+        audioManager.abandonAudioFocus(focusChangeListener);
         isRecording = false;
         stopRecordingPromise = promise;
     }
