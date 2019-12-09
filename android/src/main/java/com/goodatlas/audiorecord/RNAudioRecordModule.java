@@ -26,6 +26,7 @@ public class RNAudioRecordModule extends ReactContextBaseJavaModule {
     private int sampleRateInHz;
     private int channelConfig;
     private int audioFormat;
+    private int audioSource;
 
     private AudioRecord recorder;
     private int bufferSize;
@@ -33,6 +34,7 @@ public class RNAudioRecordModule extends ReactContextBaseJavaModule {
 
     private String tmpFile;
     private String outFile;
+    private Promise stopRecordingPromise;
 
 
     public RNAudioRecordModule(ReactApplicationContext reactContext) {
@@ -66,6 +68,11 @@ public class RNAudioRecordModule extends ReactContextBaseJavaModule {
             }
         }
 
+        audioSource = AudioSource.VOICE_RECOGNITION;
+        if (options.hasKey("audioSource")) {
+            audioSource = options.getInt("audioSource");
+        }
+
         String documentDirectoryPath = getReactApplicationContext().getFilesDir().getAbsolutePath();
         outFile = documentDirectoryPath + "/" + "audio.wav";
         tmpFile = documentDirectoryPath + "/" + "temp.pcm";
@@ -79,13 +86,14 @@ public class RNAudioRecordModule extends ReactContextBaseJavaModule {
 
         bufferSize = AudioRecord.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat);
         int recordingBufferSize = bufferSize * 3;
-        recorder = new AudioRecord(AudioSource.VOICE_RECOGNITION, sampleRateInHz, channelConfig, audioFormat, recordingBufferSize);
+        recorder = new AudioRecord(audioSource, sampleRateInHz, channelConfig, audioFormat, recordingBufferSize);
     }
 
     @ReactMethod
     public void start() {
         isRecording = true;
         recorder.startRecording();
+        Log.d(TAG, "started recording");
 
         Thread recordingThread = new Thread(new Runnable() {
             public void run() {
@@ -110,6 +118,7 @@ public class RNAudioRecordModule extends ReactContextBaseJavaModule {
                     recorder.stop();
                     os.close();
                     saveAsWav();
+                    stopRecordingPromise.resolve(outFile);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -122,7 +131,7 @@ public class RNAudioRecordModule extends ReactContextBaseJavaModule {
     @ReactMethod
     public void stop(Promise promise) {
         isRecording = false;
-        promise.resolve(outFile);
+        stopRecordingPromise = promise;
     }
 
     private void saveAsWav() {
