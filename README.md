@@ -31,6 +31,10 @@ audioFile = await AudioRecord.stop();
 AudioRecord.on('data', data => {
   // base64-encoded audio data chunks
 });
+
+AudioRecord.on('maxAmp', data => {
+  // Integer of max amplitude of audio chunk can be used for voice listening animation
+});
 ```
 
 For `audioSource` use one of the constant values from [here](https://developer.android.com/reference/android/media/MediaRecorder.AudioSource). Default value is 6 (`VOICE_RECOGNITION`).
