@@ -4,7 +4,7 @@ Audio record buffers for iOS and Android.
 
 ## Install
 ```
-yarn add react-native-audio-record
+yarn add https://github.com/saibharani/react-native-audio-record.git
 react-native link react-native-audio-record
 ```
 
